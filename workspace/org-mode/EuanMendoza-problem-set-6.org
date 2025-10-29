@@ -1,0 +1,152 @@
+#+title: Problem Set 6
+#+author: Euan Mendoza
+
+* Homework Assignment Notebook - Discrete Quantum Walks
+This notebook, containing all required deliverables, should be submitted for the Discrete Quantum Walk module homework assignment.
+
+The quantum equivalent of the random walk process can be established by defining a "Coin Flip" operator, \(C\), and a "Shift" operator, \(S\).
+
+\[
+C := \sum_{j\in V} |j\rangle\langle j| \otimes
+(2|\partial_j\rangle\langle\partial_j| - I),\\
+S :=
+\sum_{(j,k)\in E}|j,k\rangle\langle k,j|.
+\]
+
+By applying these two operators many times in succession, we establish the equivalence of the random walk in the quantum realm.
+
+** Your Assignment:
+Using the Qmod example from the lecture (4-node cycle), inspired by Andrew Childs' [[https://www.cs.umd.edu/~amchilds/qa/qa.pdf][lecture notes]] (pp. 89--90), design a quantum walk operator for a 16-node line:
+
+#+begin_html
+  <div style="text-align:center;">
+      <img src="https://docs.classiq.io/resources/linear_graph_16_nodes.png" alt="Linear 16-node Graph" />
+  </div>
+#+end_html
+
+Use the in-class quantum walk circle example code and Child's lecture notes as your starting point.
+
+You may extend it beyond the assignment's requirements and class coverage, generalizing your code into a general-purpose algorithm that handles all cases.
+
+Your code and explanations should be included in the following section, which provides a step-by-step outline of what needs to be submitted.
+
+** Your Solution:
+#+begin_src python :session q-scratch :tangle quantum-random-walk.py :comments link
+from classiq import *
+
+# 4-qubits to represent 16 states
+size = 4
+
+# 16 possible vertices
+N = 2**size
+N_idx = N - 1
+
+
+# Code from the lecture
+@qfunc
+def prepare_minus(aux: Output[QBit]):
+    allocate(1, aux)
+    X(aux)
+    H(aux)
+
+
+@qfunc
+def diffuser_oracle(aux: QNum, x: QNum):
+    aux ^= x != 0
+
+
+@qfunc
+def zero_diffuser(x: QNum):
+    aux = QBit("aux")
+    within_apply(lambda: prepare_minus(aux), lambda: diffuser_oracle(aux, x))
+
+
+# Newer option to do the oracle and preparation within one line with control and phase
+#+end_src
+
+#+RESULTS:
+: None
+
+#+begin_src python :session q-scratch :tangle quantum-random-walk.py :comments link
+@qfunc
+def C_operator(vertices: QNum, adjacent_vertices: QNum):
+    # 2^4 is 16 possible vertices
+    for i in range(N):
+        prob = N * [0]
+        if i == 0:
+            prob[1] = 1
+        elif i == N_idx:
+            prob[N_idx]
+        else:
+            prob[i - 1] = 0.5
+            prob[i + 1] = 0.5
+        print(i)
+        print(prob)
+
+        control(
+            vertices == i,
+            lambda: within_apply(
+                lambda: inplace_prepare_state(
+                    probabilities=prob, bound=0.01, target=adjacent_vertices
+                ),
+                lambda: zero_diffuser(adjacent_vertices),
+            ),
+        )
+#+end_src
+
+#+RESULTS:
+: None
+
+#+begin_src python :session q-scratch :tangle quantum-random-walk.py :comments link
+@qfunc
+def edge_oracle(res: Output[QBit], vertices: QNum, adjacent_vertices: QNum):
+    res |= ((vertices + adjacent_vertices) % 2) == 1
+
+
+@qfunc
+def bitwise_swap(x: QArray[QBit], y: QArray[QBit]):
+    for i in range(x.len):
+        SWAP(x[i], y[i])
+
+
+@qfunc
+def S_operator(vertices: QNum, adjacent_vertices: QNum):
+    res = QNum("res")
+    edge_oracle(res, vertices, adjacent_vertices)
+    control(res == 1, lambda: bitwise_swap(vertices, adjacent_vertices))
+    free(res)
+#+end_src
+
+#+RESULTS:
+: None
+
+#+begin_src python :session q-scratch :tangle quantum-random-walk.py :comments link
+@qfunc
+def main(vertices: Output[QNum], adjacent_vertices: Output[QNum]):
+    allocate(size, vertices)
+    prob1 = N * [0]
+    prob1[0] = 1
+    inplace_prepare_state(probabilities=prob1, bound=0.01, target=vertices)
+
+    prob2 = N * [0]
+    prob2[1] = 1
+    allocate(size, adjacent_vertices)
+    inplace_prepare_state(probabilities=prob2, bound=0.01, target=adjacent_vertices)
+
+    C_operator(vertices, adjacent_vertices)
+    S_operator(vertices, adjacent_vertices)
+
+
+qmod = create_model(main)
+qprog = synthesize(qmod)
+
+show(qprog)
+#+end_src
+
+#+RESULTS:
+
+Don't forget to verify that your algorithm works for several initial states!
+
+<<3a990f56-3ee8-4b5d-adca-489ca5f053eb>>
+Please upload this notebook with your solution via the submission form
+sent to you.
